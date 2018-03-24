@@ -1,1 +1,1 @@
-# ihterm
+# Indie Hackers Terminal
