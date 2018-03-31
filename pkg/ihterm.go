@@ -1,102 +1,167 @@
 package pkg
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
 const (
-	ihUrl                 = "https://www.indiehackers.com/"
-	ihPostSelector        = "div.thread-row div.ember-view"
-	ihPostUpvotesSelector = "div.thread-row.ember-view div.thread-voter.ember-view div.thread-voter__text div.thread-voter__count"
-	ihPostTitleSelector   = "div.thread-row.ember-view div.thread__details a.thread__title.ember-view"
+	ihBaseURL = "https://www.indiehackers.com/"
+
+	ihPostSelector              = "div.homepage__thread-list"
+	ihPostAuthorNameSelector    = "div.thread__metadata span.user-link__username"
+	ihPostAuthorProfileSelector = "div.thread__metadata div a"
+	ihPostPublishDateSelector   = "div.thread__metadata a.thread__date"
+	ihPostCommentSelector       = "div.thread__metadata a.thread__reply-count"
+	ihPostTitleSelector         = "div.thread__details a.thread__title"
+	ihPostUpvotesSelector       = "div.thread-voter div.thread-voter__text div.thread-voter__count"
+
+	topNPosts = 15
 )
 
 // IHTerm ...
 type IHTerm struct {
-	Url *url.URL
+	BaseURL *url.URL
+	Title   string
+	Posts   []IHPost
 }
 
-func (iht *IHTerm) Posts() ([]IHPost, error) {
-	res, err := http.Get(iht.Url.String())
+func (iht *IHTerm) downloadPosts() {
+
+	// Fetch the document
+	res, err := http.Get(iht.BaseURL.String())
 	if err != nil {
-		return nil, err
+		log.Fatalln(err)
 	}
 
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		return nil, errors.New(fmt.Sprintf("status code error: %d %s", res.StatusCode, res.Status))
+		log.Fatalln(fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status))
 	}
 
 	// Load the HTML document
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		return nil, err
+		log.Fatalln(err)
 	}
 
-	// posts := make([]IHPost, 0)
-	fmt.Println("finding")
-	fmt.Println(doc.Find("div.homepage__thread-list").Children().Length())
-	doc.Find("div.homepage__thread-list").Children().Slice(0, 14).Each(func(i int, s *goquery.Selection) {
-		fmt.Println(i)
-		userName := strings.TrimSpace(s.Find("div.thread__metadata span.user-link__username").Text())
-		if userLink, ok := s.Find("div.thread__metadata div a").Attr("href"); ok {
-			// TODO: prepend with baseUrl
-			fmt.Println(userLink)
-		}
-		fmt.Println(userName)
+	iht.Posts = make([]IHPost, 0)
+	doc.Find(ihPostSelector).Children().Slice(0, topNPosts).Each(func(i int, s *goquery.Selection) {
+		ihPost := IHPost{}
+		ihPost.Author = &IHPostAuthor{}
 
-		postLink := s.Find("div.thread__metadata a.thread__date")
-		duration := postLink.Text()
-		fmt.Println(strings.TrimSpace(duration))
-		if postUrl, ok := postLink.Attr("href"); ok {
-			fmt.Println(postUrl)
+		// Save author's name
+		ihPost.Author.Name = strings.TrimSpace(s.Find(ihPostAuthorNameSelector).Text())
+
+		// Save author's profile
+		if authorProfile, ok := s.Find(ihPostAuthorProfileSelector).Attr("href"); ok {
+			part, err := url.Parse(authorProfile)
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+			ihPost.Author.Profile = iht.BaseURL.ResolveReference(part)
 		}
 
-		commentCount := s.Find("div.thread__metadata a.thread__reply-count").Text()
-		fmt.Println(commentCount)
+		// Save post's time
+		ihPost.ApproxTime = strings.TrimSpace(s.Find(ihPostPublishDateSelector).Text())
 
-		postTitle := s.Find("div.thread__details a.thread__title").Text()
-		fmt.Println(postTitle)
+		// Save post's comment URL
+		if postCommentURL, ok := s.Find(ihPostPublishDateSelector).Attr("href"); ok {
+			part, err := url.Parse(postCommentURL)
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+			ihPost.CommentURL = iht.BaseURL.ResolveReference(part)
+		}
 
-		upvotes := s.Find("div.thread-voter div.thread-voter__text div.thread-voter__count").Text()
-		fmt.Println(upvotes)
+		// Save post's comments
+		comments, err := strconv.Atoi(strings.TrimSpace(strings.Replace(s.Find(ihPostCommentSelector).Text(), " comments", "", -1)))
+		if err != nil {
+			log.Fatalln(err)
+		}
+		ihPost.Comments = comments
 
-		fmt.Println("---")
-		// posts = append(posts, )
-		// For each item found, get the
-		// upvotes := s.Find(ihPostUpvotesSelector).Text()
-		// title := s.Find(ihPostTitleSelector).Text()
-		// fmt.Println(title)
-		// fmt.Println(upvotes)
+		// Save post's title
+		ihPost.Title = strings.TrimSpace(s.Find(ihPostTitleSelector).Text())
+
+		// Save post's url
+		if postURL, ok := s.Find(ihPostTitleSelector).Attr("href"); ok {
+			part, err := url.Parse(postURL)
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			if part.IsAbs() {
+				ihPost.URL = part
+			} else {
+				ihPost.URL = iht.BaseURL.ResolveReference(part)
+			}
+		}
+
+		// Save post's upvotes
+		upvotes, err := strconv.Atoi(strings.TrimSpace(s.Find(ihPostUpvotesSelector).Text()))
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		ihPost.Upvotes = upvotes
+
+		// Add the constructed post to the list of posts
+		iht.Posts = append(iht.Posts, ihPost)
 	})
+}
 
-	return nil, nil
+func (iht *IHTerm) BitBarString() string {
+	output := fmt.Sprintf("%s\n---\n", iht.Title)
+	for _, post := range iht.Posts {
+		output += post.BitBarString()
+	}
+
+	return output
+}
+
+type IHPostAuthor struct {
+	Name    string
+	Profile *url.URL
 }
 
 type IHPost struct {
+	Author     *IHPostAuthor
 	Upvotes    int
 	Title      string
-	Url        *url.URL
-	Author     string
+	URL        *url.URL
 	ApproxTime string
 	Comments   int
+	CommentURL *url.URL
+}
+
+// BitBarString ...
+func (ihp *IHPost) BitBarString() string {
+	return fmt.Sprintf("%s | href=%s\n", ihp.Title, ihp.URL.String()) +
+		fmt.Sprintf("Upvotes: %d Comments: %d | href=%s\n---\n", ihp.Upvotes, ihp.Comments, ihp.CommentURL.String())
 }
 
 // NewIHTerm ...
 func NewIHTerm() *IHTerm {
-	ihUrl, err := url.Parse(ihUrl)
+	ihURL, err := url.Parse(ihBaseURL)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &IHTerm{
-		Url: ihUrl,
+
+	iht := &IHTerm{
+		BaseURL: ihURL,
+		Posts:   make([]IHPost, 0),
+		Title:   "IH",
 	}
+
+	// pre-fetch the posts
+	iht.downloadPosts()
+
+	return iht
 }
