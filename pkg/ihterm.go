@@ -82,7 +82,8 @@ func (iht *IHTerm) downloadPosts() {
 		}
 
 		// Save post's comments
-		comments, err := strconv.Atoi(strings.TrimSpace(strings.Replace(s.Find(ihPostCommentSelector).Text(), " comments", "", -1)))
+		commentCount := strings.TrimSpace(strings.Split(strings.TrimSpace(s.Find(ihPostCommentSelector).Text()), " ")[0])
+		comments, err := strconv.Atoi(commentCount)
 		if err != nil {
 			log.Fatalln(err)
 		}
