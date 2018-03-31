@@ -1,5 +1,7 @@
 package pkg
 
+// TODO: Maybe use this? https://github.com/andrewstuart/goq
+
 import (
 	"fmt"
 	"log"
@@ -19,7 +21,7 @@ const (
 	ihPostAuthorProfileSelector = "div.thread__metadata div a"
 	ihPostPublishDateSelector   = "div.thread__metadata a.thread__date"
 	ihPostCommentSelector       = "div.thread__metadata a.thread__reply-count"
-	ihPostTitleSelector         = "div.thread__details a.thread__title"
+	ihPostTitleSelector         = "div.thread__details a.thread__title,text"
 	ihPostUpvotesSelector       = "div.thread-voter div.thread-voter__text div.thread-voter__count"
 
 	topNPosts = 15
