@@ -21,7 +21,7 @@ const (
 	ihPostAuthorProfileSelector = "div.thread__metadata div a"
 	ihPostPublishDateSelector   = "div.thread__metadata a.thread__date"
 	ihPostCommentSelector       = "div.thread__metadata a.thread__reply-count"
-	ihPostTitleSelector         = "div.thread__details a.thread__title,text"
+	ihPostTitleSelector         = "div.thread__details a.thread__title"
 	ihPostUpvotesSelector       = "div.thread-voter div.thread-voter__text div.thread-voter__count"
 
 	topNPosts = 15
@@ -92,7 +92,7 @@ func (iht *IHTerm) downloadPosts() {
 		ihPost.Comments = comments
 
 		// Save post's title
-		ihPost.Title = strings.TrimSpace(s.Find(ihPostTitleSelector).Text())
+		ihPost.Title = strings.TrimSpace(strings.Split(strings.TrimSpace(s.Find(ihPostTitleSelector).Text()), "\n")[0])
 
 		// Save post's url
 		if postURL, ok := s.Find(ihPostTitleSelector).Attr("href"); ok {

@@ -8,5 +8,5 @@ import (
 
 func main() {
 	iht := pkg.NewIHTerm()
-	fmt.Printf(iht.BitBarString())
+	fmt.Println(iht.BitBarString())
 }
